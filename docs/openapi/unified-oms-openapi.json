@@ -1,0 +1,288 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Unified Distributed OMS API",
+    "description": "Complete Unified OpenAPI 3.0.3 Specification for the Distributed Order Management System. Covers Order Service, Inventory Service, and Payment Service.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Distributed OMS Architecture Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001",
+      "description": "Order Service (Port 3001)"
+    },
+    {
+      "url": "http://localhost:3002",
+      "description": "Inventory Service (Port 3002)"
+    },
+    {
+      "url": "http://localhost:3003",
+      "description": "Payment Service (Port 3003)"
+    }
+  ],
+  "tags": [
+    { "name": "Orders", "description": "Order management, placement, and cancellation (Order Service :3001)" },
+    { "name": "Order Analytics", "description": "Revenue and status analytics (Order Service :3001)" },
+    { "name": "Inventory Catalog", "description": "Warehouse stock levels, product creation, and restocking (Inventory Service :3002)" },
+    { "name": "Inventory Reservations", "description": "Order-level stock reservation tracking (Inventory Service :3002)" },
+    { "name": "Payments", "description": "Payment authorization and transaction history (Payment Service :3003)" },
+    { "name": "Payment Analytics", "description": "Transaction volumes and success metrics (Payment Service :3003)" },
+    { "name": "Payment Resilience", "description": "Idempotency store audit and Dead Letter Queue replay (Payment Service :3003)" },
+    { "name": "Health & Diagnostics", "description": "Health checks across all services" }
+  ],
+  "paths": {
+    "http://localhost:3001/health": {
+      "get": {
+        "tags": ["Health & Diagnostics"],
+        "summary": "Order Service Health Check",
+        "responses": {
+          "200": { "description": "Order service is healthy" }
+        }
+      }
+    },
+    "http://localhost:3002/health": {
+      "get": {
+        "tags": ["Health & Diagnostics"],
+        "summary": "Inventory Service Health Check",
+        "responses": {
+          "200": { "description": "Inventory service is healthy" }
+        }
+      }
+    },
+    "http://localhost:3003/health": {
+      "get": {
+        "tags": ["Health & Diagnostics"],
+        "summary": "Payment Service Health Check",
+        "responses": {
+          "200": { "description": "Payment service is healthy" }
+        }
+      }
+    },
+    "http://localhost:3001/api/orders/stats/summary": {
+      "get": {
+        "tags": ["Order Analytics"],
+        "summary": "Get executive summary of orders and revenue",
+        "responses": {
+          "200": { "description": "Aggregated order statistics" }
+        }
+      }
+    },
+    "http://localhost:3001/api/orders": {
+      "get": {
+        "tags": ["Orders"],
+        "summary": "List orders with pagination & filters",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["PENDING", "CONFIRMED", "COMPENSATING", "CANCELLED"] } },
+          { "name": "customerId", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Paginated orders list" } }
+      },
+      "post": {
+        "tags": ["Orders"],
+        "summary": "Create a new order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["customerId", "items"],
+                "properties": {
+                  "customerId": { "type": "string", "example": "cust-alice" },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["sku", "quantity", "unitPrice"],
+                      "properties": {
+                        "sku": { "type": "string", "example": "macbook-m3" },
+                        "quantity": { "type": "integer", "example": 1 },
+                        "unitPrice": { "type": "number", "example": 150000 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Order created in PENDING state" } }
+      }
+    },
+    "http://localhost:3001/api/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "summary": "Get single order details with items and outbox events",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "Order details" } }
+      }
+    },
+    "http://localhost:3001/api/orders/{id}/cancel": {
+      "post": {
+        "tags": ["Orders"],
+        "summary": "Cancel order with Saga compensation rollback",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string", "example": "Customer requested cancellation" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Cancellation initiated" } }
+      }
+    },
+    "http://localhost:3002/api/inventory": {
+      "get": {
+        "tags": ["Inventory Catalog"],
+        "summary": "List all warehouse products with stock counts",
+        "responses": { "200": { "description": "Inventory catalog" } }
+      },
+      "post": {
+        "tags": ["Inventory Catalog"],
+        "summary": "Register new SKU into catalog",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sku", "name"],
+                "properties": {
+                  "sku": { "type": "string", "example": "airpods-pro" },
+                  "name": { "type": "string", "example": "Apple AirPods Pro 2" },
+                  "availableQuantity": { "type": "integer", "example": 25 }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Product registered" } }
+      }
+    },
+    "http://localhost:3002/api/inventory/{sku}": {
+      "get": {
+        "tags": ["Inventory Catalog"],
+        "summary": "Get real-time stock for single SKU",
+        "parameters": [
+          { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "SKU stock details" } }
+      }
+    },
+    "http://localhost:3002/api/inventory/{sku}/restock": {
+      "post": {
+        "tags": ["Inventory Catalog"],
+        "summary": "Restock / increment stock for an existing SKU",
+        "parameters": [
+          { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantityToAdd"],
+                "properties": {
+                  "quantityToAdd": { "type": "integer", "example": 10 }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Restocked successfully" } }
+      }
+    },
+    "http://localhost:3002/api/inventory/reservations": {
+      "get": {
+        "tags": ["Inventory Reservations"],
+        "summary": "List stock reservations",
+        "parameters": [
+          { "name": "orderId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["RESERVED", "RELEASED", "CONFIRMED"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "List of reservations" } }
+      }
+    },
+    "http://localhost:3002/api/inventory/reservations/{orderId}": {
+      "get": {
+        "tags": ["Inventory Reservations"],
+        "summary": "Get reservations for specific order",
+        "parameters": [
+          { "name": "orderId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "Order reservations" } }
+      }
+    },
+    "http://localhost:3003/api/payments/stats": {
+      "get": {
+        "tags": ["Payment Analytics"],
+        "summary": "Payment transaction volume and count metrics",
+        "responses": { "200": { "description": "Payment statistics" } }
+      }
+    },
+    "http://localhost:3003/api/payments": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "List payment records with filters",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["AUTHORIZED", "FAILED"] } },
+          { "name": "orderId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "List of payments" } }
+      }
+    },
+    "http://localhost:3003/api/payments/{id}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get payment by payment ID",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "Payment record" } }
+      }
+    },
+    "http://localhost:3003/api/payments/order/{orderId}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get payment by order ID",
+        "parameters": [
+          { "name": "orderId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "Order payments" } }
+      }
+    },
+    "http://localhost:3003/api/payments/processed-events": {
+      "get": {
+        "tags": ["Payment Resilience"],
+        "summary": "List deduplicated event IDs (Idempotency Audit)",
+        "responses": { "200": { "description": "Processed events log" } }
+      }
+    },
+    "http://localhost:3003/api/payments/dlq/replay": {
+      "post": {
+        "tags": ["Payment Resilience"],
+        "summary": "Trigger Dead Letter Queue (DLQ) replay",
+        "responses": { "200": { "description": "DLQ replay summary" } }
+      }
+    }
+  }
+}

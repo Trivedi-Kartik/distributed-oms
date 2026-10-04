@@ -1,0 +1,25 @@
+{
+  "name": "distributed-oms",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.8.1",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.8.1",
+  "type": "module",
+  "dependencies": {
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0"
+  }
+}

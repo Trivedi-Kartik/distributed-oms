@@ -1,0 +1,122 @@
+services:
+  # ============================================================================
+  # POSTGRESQL DATABASE
+  # ============================================================================
+  # Relational database providing ACID guarantees for Order, Inventory, & Payment.
+  # In production, each service would have its own physically separate DB server.
+  # For local dev, we run one Postgres engine with separate databases inside it.
+  # ============================================================================
+  postgres:
+    # Official alpine-based image (lightweight, ~50MB vs standard ~400MB)
+    image: postgres:16-alpine
+    container_name: oms-postgres
+    restart: always
+
+    # Environment variables read by the official Postgres image on startup
+    environment:
+      POSTGRES_USER: oms_user          # Master database username
+      POSTGRES_PASSWORD: oms_password  # Master database password
+      POSTGRES_DB: order_db            # Default primary database created on boot
+
+    # Port mapping: "HOST:CONTAINER"
+    # Port 5432 on your laptop forwards directly to 5432 inside the container
+    ports:
+      - '5432:5432'
+
+    volumes:
+      # Named volume: keeps database data persistent on disk even if container stops
+      - pgdata:/var/lib/postgresql/data
+      
+      # Init script: Postgres automatically runs any .sql scripts in this internal 
+      # directory on FIRST startup. We use this to create inventory_db and payment_db.
+      - ./infrastructure/docker/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+
+  # ============================================================================
+  # APACHE KAFKA (KRaft Mode - No ZooKeeper required)
+  # ============================================================================
+  # The distributed commit log and event backbone for our microservices.
+  # We use the official Apache Kafka image.
+  # ============================================================================
+  kafka:
+    image: apache/kafka:latest
+    container_name: oms-kafka
+    restart: always
+
+    # Port mapping: Only port 9094 is exposed to your laptop (external listener).
+    # Port 9092 is kept inside the internal Docker network for other containers.
+    ports:
+      - '9094:9094'
+
+    environment:
+      # Node & Cluster Identity
+      KAFKA_NODE_ID: 1                       # Unique ID for this Kafka broker node
+      KAFKA_PROCESS_ROLES: 'broker,controller' # This single node acts as both storage (broker) and manager (controller)
+
+      # Listeners define how clients connect to Kafka.
+      # 1. CONTROLLER (port 9093): Used internally for cluster leadership voting.
+      # 2. PLAINTEXT (port 9092): Used by other Docker containers (like kafka-ui).
+      # 3. EXTERNAL (port 9094): Used by your Node.js apps running on your laptop.
+      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094'
+      
+      # Advertised listeners are what Kafka hands back to clients on first handshake:
+      # Tells Docker containers: "Reach me at kafka:9092"
+      # Tells your host machine: "Reach me at localhost:9094"
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094'
+      
+      # Protocol security mapping for each named listener
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      
+      # Quorum voter setup for KRaft: Tells Kafka that Node 1 on port 9093 controls quorum
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+
+      # Development convenience: Auto-creates a topic when an app publishes to it
+      # In strict production, this is usually set to false to prevent accidental typos in topic names
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+      # Kafka requires at least 1 replica of metadata log
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+    volumes:
+      # Named volume: Persists all Kafka topics, messages, and consumer offsets to disk
+      - kafkadata:/var/lib/kafka/data
+
+  # ============================================================================
+  # KAFKA UI (Dashboard)
+  # ============================================================================
+  # Web interface to view topics, messages, consumer groups, and lag in real-time.
+  # Open in browser: http://localhost:8080
+  # ============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: oms-kafka-ui
+    restart: always
+    ports:
+      - '8080:8080'
+    environment:
+      KAFKA_CLUSTERS_0_NAME: 'local-cluster'
+      # Talks to Kafka using internal Docker DNS name and internal port 9092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:9092'
+    depends_on:
+      - kafka
+    
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: oms-jaeger
+    ports:
+      - "16686:16686" # Web UI
+      - "4318:4318"   # OpenTelemetry HTTP Receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+# ============================================================================
+# PERSISTENT VOLUMES
+# ============================================================================
+# Declares Docker storage volumes managed by Docker engine on your machine.
+# Even if containers are stopped or deleted, your database records and Kafka logs survive.
+# ============================================================================
+volumes:
+  pgdata:
+  kafkadata:

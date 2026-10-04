@@ -1,0 +1,538 @@
+{
+    "openapi":  "3.0.3",
+    "info":  {
+                 "title":  "Order Service API",
+                 "description":  "Order Management, Transactional Outbox, and Saga Orchestration APIs for Distributed OMS.",
+                 "version":  "1.0.0",
+                 "contact":  {
+                                 "name":  "Distributed OMS Team"
+                             }
+             },
+    "servers":  [
+                    {
+                        "url":  "http://localhost:3001",
+                        "description":  "Local Order Service Instance"
+                    }
+                ],
+    "tags":  [
+                 {
+                     "name":  "System",
+                     "description":  "Health and service diagnostics"
+                 },
+                 {
+                     "name":  "Analytics",
+                     "description":  "Order volume and revenue statistics"
+                 },
+                 {
+                     "name":  "Orders",
+                     "description":  "Order creation, retrieval, and Saga cancellation"
+                 }
+             ],
+    "paths":  {
+                  "/health":  {
+                                  "get":  {
+                                              "tags":  [
+                                                           "System"
+                                                       ],
+                                              "summary":  "Health check",
+                                              "description":  "Returns health status and timestamp of the Order Service.",
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Service is healthy",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "type":  "object",
+                                                                                                                                    "properties":  {
+                                                                                                                                                       "status":  {
+                                                                                                                                                                      "type":  "string",
+                                                                                                                                                                      "example":  "healthy"
+                                                                                                                                                                  },
+                                                                                                                                                       "service":  {
+                                                                                                                                                                       "type":  "string",
+                                                                                                                                                                       "example":  "order-service"
+                                                                                                                                                                   },
+                                                                                                                                                       "timestamp":  {
+                                                                                                                                                                         "type":  "string",
+                                                                                                                                                                         "format":  "date-time"
+                                                                                                                                                                     }
+                                                                                                                                                   }
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        }
+                                                            }
+                                          }
+                              },
+                  "/api/orders/stats/summary":  {
+                                                    "get":  {
+                                                                "tags":  [
+                                                                             "Analytics"
+                                                                         ],
+                                                                "summary":  "Order statistics and revenue summary",
+                                                                "description":  "Retrieves total orders, total revenue, confirmed revenue, and order counts grouped by status.",
+                                                                "responses":  {
+                                                                                  "200":  {
+                                                                                              "description":  "Aggregated order statistics",
+                                                                                              "content":  {
+                                                                                                              "application/json":  {
+                                                                                                                                       "schema":  {
+                                                                                                                                                      "type":  "object",
+                                                                                                                                                      "properties":  {
+                                                                                                                                                                         "totalOrders":  {
+                                                                                                                                                                                             "type":  "integer",
+                                                                                                                                                                                             "example":  12
+                                                                                                                                                                                         },
+                                                                                                                                                                         "totalRevenue":  {
+                                                                                                                                                                                              "type":  "number",
+                                                                                                                                                                                              "example":  4500000
+                                                                                                                                                                                          },
+                                                                                                                                                                         "confirmedRevenue":  {
+                                                                                                                                                                                                  "type":  "number",
+                                                                                                                                                                                                  "example":  1500000
+                                                                                                                                                                                              },
+                                                                                                                                                                         "countsByStatus":  {
+                                                                                                                                                                                                "type":  "object",
+                                                                                                                                                                                                "properties":  "@{PENDING=; CONFIRMED=; COMPENSATING=; CANCELLED=}"
+                                                                                                                                                                                            }
+                                                                                                                                                                     }
+                                                                                                                                                  }
+                                                                                                                                   }
+                                                                                                          }
+                                                                                          }
+                                                                              }
+                                                            }
+                                                },
+                  "/api/orders":  {
+                                      "get":  {
+                                                  "tags":  [
+                                                               "Orders"
+                                                           ],
+                                                  "summary":  "List orders with filtering and pagination",
+                                                  "parameters":  [
+                                                                     {
+                                                                         "name":  "status",
+                                                                         "in":  "query",
+                                                                         "description":  "Filter by order status",
+                                                                         "required":  false,
+                                                                         "schema":  {
+                                                                                        "type":  "string",
+                                                                                        "enum":  [
+                                                                                                     "PENDING",
+                                                                                                     "CONFIRMED",
+                                                                                                     "COMPENSATING",
+                                                                                                     "CANCELLED"
+                                                                                                 ]
+                                                                                    }
+                                                                     },
+                                                                     {
+                                                                         "name":  "customerId",
+                                                                         "in":  "query",
+                                                                         "description":  "Filter by customer identifier",
+                                                                         "required":  false,
+                                                                         "schema":  {
+                                                                                        "type":  "string"
+                                                                                    }
+                                                                     },
+                                                                     {
+                                                                         "name":  "limit",
+                                                                         "in":  "query",
+                                                                         "description":  "Number of orders to return (1-100, default: 20)",
+                                                                         "required":  false,
+                                                                         "schema":  {
+                                                                                        "type":  "integer",
+                                                                                        "default":  20
+                                                                                    }
+                                                                     },
+                                                                     {
+                                                                         "name":  "offset",
+                                                                         "in":  "query",
+                                                                         "description":  "Number of orders to skip (default: 0)",
+                                                                         "required":  false,
+                                                                         "schema":  {
+                                                                                        "type":  "integer",
+                                                                                        "default":  0
+                                                                                    }
+                                                                     }
+                                                                 ],
+                                                  "responses":  {
+                                                                    "200":  {
+                                                                                "description":  "Paginated list of orders",
+                                                                                "content":  {
+                                                                                                "application/json":  {
+                                                                                                                         "schema":  {
+                                                                                                                                        "type":  "object",
+                                                                                                                                        "properties":  {
+                                                                                                                                                           "total":  {
+                                                                                                                                                                         "type":  "integer",
+                                                                                                                                                                         "example":  5
+                                                                                                                                                                     },
+                                                                                                                                                           "limit":  {
+                                                                                                                                                                         "type":  "integer",
+                                                                                                                                                                         "example":  20
+                                                                                                                                                                     },
+                                                                                                                                                           "offset":  {
+                                                                                                                                                                          "type":  "integer",
+                                                                                                                                                                          "example":  0
+                                                                                                                                                                      },
+                                                                                                                                                           "orders":  {
+                                                                                                                                                                          "type":  "array",
+                                                                                                                                                                          "items":  "@{$ref=#/components/schemas/OrderSummary}"
+                                                                                                                                                                      }
+                                                                                                                                                       }
+                                                                                                                                    }
+                                                                                                                     }
+                                                                                            }
+                                                                            }
+                                                                }
+                                              },
+                                      "post":  {
+                                                   "tags":  [
+                                                                "Orders"
+                                                            ],
+                                                   "summary":  "Create a new order",
+                                                   "description":  "Saves the order and line items to PostgreSQL, creates an outbox event in the same transaction, and triggers Saga orchestration.",
+                                                   "requestBody":  {
+                                                                       "required":  true,
+                                                                       "content":  {
+                                                                                       "application/json":  {
+                                                                                                                "schema":  {
+                                                                                                                               "$ref":  "#/components/schemas/CreateOrderRequest"
+                                                                                                                           }
+                                                                                                            }
+                                                                                   }
+                                                                   },
+                                                   "responses":  {
+                                                                     "201":  {
+                                                                                 "description":  "Order successfully created in PENDING state",
+                                                                                 "content":  {
+                                                                                                 "application/json":  {
+                                                                                                                          "schema":  {
+                                                                                                                                         "type":  "object",
+                                                                                                                                         "properties":  {
+                                                                                                                                                            "orderId":  {
+                                                                                                                                                                            "type":  "string",
+                                                                                                                                                                            "format":  "uuid"
+                                                                                                                                                                        },
+                                                                                                                                                            "status":  {
+                                                                                                                                                                           "type":  "string",
+                                                                                                                                                                           "example":  "PENDING"
+                                                                                                                                                                       },
+                                                                                                                                                            "totalAmount":  {
+                                                                                                                                                                                "type":  "number",
+                                                                                                                                                                                "example":  150000
+                                                                                                                                                                            },
+                                                                                                                                                            "currency":  {
+                                                                                                                                                                             "type":  "string",
+                                                                                                                                                                             "example":  "INR"
+                                                                                                                                                                         },
+                                                                                                                                                            "correlationId":  {
+                                                                                                                                                                                  "type":  "string"
+                                                                                                                                                                              },
+                                                                                                                                                            "createdAt":  {
+                                                                                                                                                                              "type":  "string",
+                                                                                                                                                                              "format":  "date-time"
+                                                                                                                                                                          }
+                                                                                                                                                        }
+                                                                                                                                     }
+                                                                                                                      }
+                                                                                             }
+                                                                             },
+                                                                     "400":  {
+                                                                                 "description":  "Validation error in request payload"
+                                                                             }
+                                                                 }
+                                               }
+                                  },
+                  "/api/orders/{id}":  {
+                                           "get":  {
+                                                       "tags":  [
+                                                                    "Orders"
+                                                                ],
+                                                       "summary":  "Get single order details by ID",
+                                                       "description":  "Retrieves order metadata, associated line items, and outbox event publication history.",
+                                                       "parameters":  [
+                                                                          {
+                                                                              "name":  "id",
+                                                                              "in":  "path",
+                                                                              "required":  true,
+                                                                              "description":  "Order UUID",
+                                                                              "schema":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "uuid"
+                                                                                         }
+                                                                          }
+                                                                      ],
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "description":  "Order details with line items and outbox events",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "$ref":  "#/components/schemas/OrderDetail"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 },
+                                                                         "404":  {
+                                                                                     "description":  "Order not found"
+                                                                                 }
+                                                                     }
+                                                   }
+                                       },
+                  "/api/orders/{id}/cancel":  {
+                                                  "post":  {
+                                                               "tags":  [
+                                                                            "Orders"
+                                                                        ],
+                                                               "summary":  "Cancel an order",
+                                                               "description":  "Manually initiates order cancellation. If the order was confirmed or pending, publishes an InventoryReleaseRequested event via the outbox to return reserved stock to available inventory.",
+                                                               "parameters":  [
+                                                                                  {
+                                                                                      "name":  "id",
+                                                                                      "in":  "path",
+                                                                                      "required":  true,
+                                                                                      "description":  "Order UUID",
+                                                                                      "schema":  {
+                                                                                                     "type":  "string",
+                                                                                                     "format":  "uuid"
+                                                                                                 }
+                                                                                  }
+                                                                              ],
+                                                               "requestBody":  {
+                                                                                   "required":  false,
+                                                                                   "content":  {
+                                                                                                   "application/json":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "type":  "object",
+                                                                                                                                           "properties":  {
+                                                                                                                                                              "reason":  {
+                                                                                                                                                                             "type":  "string",
+                                                                                                                                                                             "example":  "Customer requested cancellation"
+                                                                                                                                                                         }
+                                                                                                                                                          }
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                               }
+                                                                               },
+                                                               "responses":  {
+                                                                                 "200":  {
+                                                                                             "description":  "Cancellation initiated successfully",
+                                                                                             "content":  {
+                                                                                                             "application/json":  {
+                                                                                                                                      "schema":  {
+                                                                                                                                                     "type":  "object",
+                                                                                                                                                     "properties":  {
+                                                                                                                                                                        "orderId":  {
+                                                                                                                                                                                        "type":  "string",
+                                                                                                                                                                                        "format":  "uuid"
+                                                                                                                                                                                    },
+                                                                                                                                                                        "message":  {
+                                                                                                                                                                                        "type":  "string",
+                                                                                                                                                                                        "example":  "Order cancellation initiated successfully"
+                                                                                                                                                                                    },
+                                                                                                                                                                        "reason":  {
+                                                                                                                                                                                       "type":  "string",
+                                                                                                                                                                                       "example":  "Customer requested cancellation"
+                                                                                                                                                                                   }
+                                                                                                                                                                    }
+                                                                                                                                                 }
+                                                                                                                                  }
+                                                                                                         }
+                                                                                         },
+                                                                                 "400":  {
+                                                                                             "description":  "Order already cancelled or undergoing compensation"
+                                                                                         },
+                                                                                 "404":  {
+                                                                                             "description":  "Order not found"
+                                                                                         }
+                                                                             }
+                                                           }
+                                              }
+              },
+    "components":  {
+                       "schemas":  {
+                                       "OrderItem":  {
+                                                         "type":  "object",
+                                                         "required":  [
+                                                                          "sku",
+                                                                          "quantity",
+                                                                          "unitPrice"
+                                                                      ],
+                                                         "properties":  {
+                                                                            "sku":  {
+                                                                                        "type":  "string",
+                                                                                        "example":  "macbook-m3"
+                                                                                    },
+                                                                            "quantity":  {
+                                                                                             "type":  "integer",
+                                                                                             "minimum":  1,
+                                                                                             "example":  1
+                                                                                         },
+                                                                            "unitPrice":  {
+                                                                                              "type":  "number",
+                                                                                              "minimum":  0.01,
+                                                                                              "example":  150000
+                                                                                          }
+                                                                        }
+                                                     },
+                                       "CreateOrderRequest":  {
+                                                                  "type":  "object",
+                                                                  "required":  [
+                                                                                   "customerId",
+                                                                                   "items"
+                                                                               ],
+                                                                  "properties":  {
+                                                                                     "customerId":  {
+                                                                                                        "type":  "string",
+                                                                                                        "example":  "cust-alice"
+                                                                                                    },
+                                                                                     "items":  {
+                                                                                                   "type":  "array",
+                                                                                                   "items":  {
+                                                                                                                 "$ref":  "#/components/schemas/OrderItem"
+                                                                                                             },
+                                                                                                   "example":  [
+                                                                                                                   {
+                                                                                                                       "sku":  "macbook-m3",
+                                                                                                                       "quantity":  1,
+                                                                                                                       "unitPrice":  150000
+                                                                                                                   }
+                                                                                                               ]
+                                                                                               }
+                                                                                 }
+                                                              },
+                                       "OrderSummary":  {
+                                                            "type":  "object",
+                                                            "properties":  {
+                                                                               "id":  {
+                                                                                          "type":  "string",
+                                                                                          "format":  "uuid"
+                                                                                      },
+                                                                               "customer_id":  {
+                                                                                                   "type":  "string"
+                                                                                               },
+                                                                               "status":  {
+                                                                                              "type":  "string",
+                                                                                              "enum":  [
+                                                                                                           "PENDING",
+                                                                                                           "CONFIRMED",
+                                                                                                           "COMPENSATING",
+                                                                                                           "CANCELLED"
+                                                                                                       ]
+                                                                                          },
+                                                                               "total_amount":  {
+                                                                                                    "type":  "string",
+                                                                                                    "example":  "150000.00"
+                                                                                                },
+                                                                               "currency":  {
+                                                                                                "type":  "string",
+                                                                                                "example":  "INR"
+                                                                                            },
+                                                                               "cancellation_reason":  {
+                                                                                                           "type":  "string",
+                                                                                                           "nullable":  true
+                                                                                                       },
+                                                                               "created_at":  {
+                                                                                                  "type":  "string",
+                                                                                                  "format":  "date-time"
+                                                                                              },
+                                                                               "updated_at":  {
+                                                                                                  "type":  "string",
+                                                                                                  "format":  "date-time"
+                                                                                              },
+                                                                               "item_count":  {
+                                                                                                  "type":  "integer",
+                                                                                                  "example":  1
+                                                                                              }
+                                                                           }
+                                                        },
+                                       "OrderDetail":  {
+                                                           "type":  "object",
+                                                           "properties":  {
+                                                                              "id":  {
+                                                                                         "type":  "string",
+                                                                                         "format":  "uuid"
+                                                                                     },
+                                                                              "customer_id":  {
+                                                                                                  "type":  "string"
+                                                                                              },
+                                                                              "status":  {
+                                                                                             "type":  "string",
+                                                                                             "enum":  [
+                                                                                                          "PENDING",
+                                                                                                          "CONFIRMED",
+                                                                                                          "COMPENSATING",
+                                                                                                          "CANCELLED"
+                                                                                                      ]
+                                                                                         },
+                                                                              "total_amount":  {
+                                                                                                   "type":  "string",
+                                                                                                   "example":  "150000.00"
+                                                                                               },
+                                                                              "currency":  {
+                                                                                               "type":  "string",
+                                                                                               "example":  "INR"
+                                                                                           },
+                                                                              "cancellation_reason":  {
+                                                                                                          "type":  "string",
+                                                                                                          "nullable":  true
+                                                                                                      },
+                                                                              "created_at":  {
+                                                                                                 "type":  "string",
+                                                                                                 "format":  "date-time"
+                                                                                             },
+                                                                              "updated_at":  {
+                                                                                                 "type":  "string",
+                                                                                                 "format":  "date-time"
+                                                                                             },
+                                                                              "items":  {
+                                                                                            "type":  "array",
+                                                                                            "items":  {
+                                                                                                          "type":  "object",
+                                                                                                          "properties":  {
+                                                                                                                             "id":  {
+                                                                                                                                        "type":  "string",
+                                                                                                                                        "format":  "uuid"
+                                                                                                                                    },
+                                                                                                                             "sku":  {
+                                                                                                                                         "type":  "string"
+                                                                                                                                     },
+                                                                                                                             "quantity":  {
+                                                                                                                                              "type":  "integer"
+                                                                                                                                          },
+                                                                                                                             "unit_price":  {
+                                                                                                                                                "type":  "string"
+                                                                                                                                            }
+                                                                                                                         }
+                                                                                                      }
+                                                                                        },
+                                                                              "outboxEvents":  {
+                                                                                                   "type":  "array",
+                                                                                                   "items":  {
+                                                                                                                 "type":  "object",
+                                                                                                                 "properties":  {
+                                                                                                                                    "id":  {
+                                                                                                                                               "type":  "string",
+                                                                                                                                               "format":  "uuid"
+                                                                                                                                           },
+                                                                                                                                    "event_type":  {
+                                                                                                                                                       "type":  "string"
+                                                                                                                                                   },
+                                                                                                                                    "created_at":  {
+                                                                                                                                                       "type":  "string",
+                                                                                                                                                       "format":  "date-time"
+                                                                                                                                                   },
+                                                                                                                                    "published_at":  {
+                                                                                                                                                         "type":  "string",
+                                                                                                                                                         "format":  "date-time",
+                                                                                                                                                         "nullable":  true
+                                                                                                                                                     }
+                                                                                                                                }
+                                                                                                             }
+                                                                                               }
+                                                                          }
+                                                       }
+                                   }
+                   }
+}
